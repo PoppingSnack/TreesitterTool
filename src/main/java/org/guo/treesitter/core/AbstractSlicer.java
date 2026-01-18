@@ -7,6 +7,7 @@ import org.treesitter.TSTreeCursor;
 import org.treesitter.TSLanguage;
 import org.guo.treesitter.model.CodeSlice;
 import org.guo.treesitter.model.LanguageType;
+import org.guo.treesitter.model.SliceType;
 import org.guo.treesitter.service.CodeSlicer;
 
 import java.nio.charset.StandardCharsets;
@@ -20,8 +21,19 @@ public abstract class AbstractSlicer implements CodeSlicer {
 
     protected abstract LanguageType getLanguageType();
     protected abstract TSLanguage getLanguage(); 
-    protected abstract boolean isFunctionNode(TSNode node);
-    protected abstract String getFunctionName(TSNode node, byte[] sourceBytes);
+    
+    // Updated hooks for determining node validity and type
+    protected abstract boolean shouldSlice(TSNode node);
+    protected abstract String getName(TSNode node, byte[] sourceBytes);
+    protected abstract SliceType getSliceType(TSNode node);
+
+    // Backward compatibility methods (can be removed later if all subclasses are updated)
+    protected boolean isFunctionNode(TSNode node) {
+        return shouldSlice(node);
+    }
+    protected String getFunctionName(TSNode node, byte[] sourceBytes) {
+        return getName(node, sourceBytes);
+    }
 
     /**
      * Returns the S-expression query for extracting functions.
@@ -63,8 +75,9 @@ public abstract class AbstractSlicer implements CodeSlicer {
         while (!reachedRoot) {
             TSNode currentNode = cursor.currentNode();
             
-            if (isFunctionNode(currentNode)) {
-                String funcName = getFunctionName(currentNode, sourceBytes);
+            if (shouldSlice(currentNode)) {
+                String name = getName(currentNode, sourceBytes);
+                SliceType type = getSliceType(currentNode);
                 
                 // Convert 0-based row to 1-based line number
                 int startLine = currentNode.getStartPoint().getRow() + 1;
@@ -76,7 +89,7 @@ public abstract class AbstractSlicer implements CodeSlicer {
                 // Extract content using bytes to ensure correct offsets
                 String content = new String(sourceBytes, startByte, endByte - startByte, StandardCharsets.UTF_8);
 
-                slices.add(new CodeSlice(content, funcName, startLine, endLine, getLanguageType()));
+                slices.add(new CodeSlice(content, name, startLine, endLine, getLanguageType(), type));
             }
 
             if (cursor.gotoFirstChild()) {

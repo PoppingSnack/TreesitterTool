@@ -4,6 +4,7 @@ import org.treesitter.TSNode;
 import org.treesitter.TSLanguage;
 import org.treesitter.TreeSitterC;
 import org.guo.treesitter.model.LanguageType;
+import org.guo.treesitter.model.SliceType;
 
 public class CSlicer extends AbstractSlicer {
 
@@ -18,50 +19,59 @@ public class CSlicer extends AbstractSlicer {
     }
 
     @Override
-    protected boolean isFunctionNode(TSNode node) {
-        return "function_definition".equals(node.getType());
+    protected boolean shouldSlice(TSNode node) {
+        String type = node.getType();
+        return "function_definition".equals(type) ||
+               "struct_specifier".equals(type) ||
+               "enum_specifier".equals(type);
     }
 
     @Override
-    protected String getFunctionName(TSNode node, byte[] sourceBytes) {
-        // In C, the name is inside declarator -> function_declarator -> declarator -> identifier
-        // Or direct declarator -> identifier. It can be complex due to pointers.
-        // We will try to find the 'declarator' child.
-        TSNode declarator = node.getChildByFieldName("declarator");
-        if (declarator == null || declarator.isNull()) {
+    protected String getName(TSNode node, byte[] sourceBytes) {
+        String type = node.getType();
+        
+        if ("struct_specifier".equals(type) || "enum_specifier".equals(type)) {
+            TSNode nameNode = node.getChildByFieldName("name");
+            if (nameNode != null && !nameNode.isNull()) {
+                return getNodeText(nameNode, sourceBytes);
+            }
             return "anonymous";
         }
+
+        // function_definition -> declarator -> function_declarator -> declarator -> identifier
+        TSNode declarator = node.getChildByFieldName("declarator");
+        if (declarator != null) {
+            return extractNameFromDeclarator(declarator, sourceBytes);
+        }
+        return "anonymous";
+    }
+
+    private String extractNameFromDeclarator(TSNode declarator, byte[] sourceBytes) {
+        if (declarator == null || declarator.isNull()) return "anonymous";
+        String type = declarator.getType();
         
-        // Simple heuristic: drill down until identifier
-        TSNode current = declarator;
-        while (current != null && !current.isNull()) {
-            if ("identifier".equals(current.getType())) {
-                return getNodeText(current, sourceBytes);
-            }
-            if ("function_declarator".equals(current.getType())) {
-                current = current.getChildByFieldName("declarator");
-                continue;
-            }
-            if ("pointer_declarator".equals(current.getType())) {
-                current = current.getChildByFieldName("declarator");
-                continue;
-            }
-            if ("parenthesized_declarator".equals(current.getType())) {
-                current = current.getChildByFieldName("declarator");
-                continue;
-            }
-            break;
+        if ("identifier".equals(type)) {
+            return getNodeText(declarator, sourceBytes);
         }
         
-        return "unknown_c_function";
+        if ("function_declarator".equals(type) || "pointer_declarator".equals(type) || "parenthesized_declarator".equals(type)) {
+             TSNode childDeclarator = declarator.getChildByFieldName("declarator");
+             return extractNameFromDeclarator(childDeclarator, sourceBytes);
+        }
+        
+        return "anonymous";
+    }
+
+    @Override
+    protected SliceType getSliceType(TSNode node) {
+        String type = node.getType();
+        if ("struct_specifier".equals(type)) return SliceType.STRUCT;
+        if ("enum_specifier".equals(type)) return SliceType.ENUM;
+        return SliceType.FUNCTION;
     }
 
     @Override
     public String getFunctionQuery() {
-        // Matches standard function definitions
-        // Capture the declarator structure to extract name later if needed, but for simplicity
-        // we try to match the identifier deep inside.
-        // This query attempts to find the identifier nested within declarators.
-        return "(function_definition declarator: (_ declarator: (identifier) @name)) @function";
+        return "(function_definition declarator: (function_declarator declarator: (identifier) @name)) @function";
     }
 }

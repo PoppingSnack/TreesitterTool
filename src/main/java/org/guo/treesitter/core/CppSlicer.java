@@ -4,6 +4,7 @@ import org.treesitter.TSNode;
 import org.treesitter.TSLanguage;
 import org.treesitter.TreeSitterCpp;
 import org.guo.treesitter.model.LanguageType;
+import org.guo.treesitter.model.SliceType;
 
 public class CppSlicer extends AbstractSlicer {
 
@@ -18,42 +19,65 @@ public class CppSlicer extends AbstractSlicer {
     }
 
     @Override
-    protected boolean isFunctionNode(TSNode node) {
-        return "function_definition".equals(node.getType());
+    protected boolean shouldSlice(TSNode node) {
+        String type = node.getType();
+        return "function_definition".equals(type) ||
+               "class_specifier".equals(type) ||
+               "struct_specifier".equals(type) ||
+               "enum_specifier".equals(type);
     }
 
     @Override
-    protected String getFunctionName(TSNode node, byte[] sourceBytes) {
-        TSNode declarator = node.getChildByFieldName("declarator");
-        if (declarator == null || declarator.isNull()) {
+    protected String getName(TSNode node, byte[] sourceBytes) {
+        String type = node.getType();
+        
+        if ("class_specifier".equals(type) || "struct_specifier".equals(type) || "enum_specifier".equals(type)) {
+            TSNode nameNode = node.getChildByFieldName("name");
+            if (nameNode != null && !nameNode.isNull()) {
+                return getNodeText(nameNode, sourceBytes);
+            }
             return "anonymous";
         }
-
-        // Similar to C but handles C++ specifics like scoped identifiers (MyClass::method)
-        TSNode current = declarator;
-        while (current != null && !current.isNull()) {
-            if ("identifier".equals(current.getType()) || "field_identifier".equals(current.getType())) {
-                return getNodeText(current, sourceBytes);
-            }
-            if ("qualified_identifier".equals(current.getType())) {
-                // Return the full qualified name e.g. Class::Method
-                return getNodeText(current, sourceBytes);
-            }
-            if ("function_declarator".equals(current.getType()) || 
-                "pointer_declarator".equals(current.getType()) || 
-                "reference_declarator".equals(current.getType())) {
-                current = current.getChildByFieldName("declarator");
-                continue;
-            }
-            break;
+        
+        TSNode declarator = node.getChildByFieldName("declarator");
+        if (declarator != null) {
+            return extractNameFromDeclarator(declarator, sourceBytes);
         }
-        return "unknown_cpp_function";
+        return "anonymous";
+    }
+
+    private String extractNameFromDeclarator(TSNode declarator, byte[] sourceBytes) {
+        if (declarator == null || declarator.isNull()) return "anonymous";
+        String type = declarator.getType();
+        
+        if ("identifier".equals(type) || "field_identifier".equals(type)) {
+            return getNodeText(declarator, sourceBytes);
+        }
+        
+        if ("qualified_identifier".equals(type)) {
+            // Class::method
+             return getNodeText(declarator, sourceBytes);
+        }
+        
+        if ("function_declarator".equals(type) || "pointer_declarator".equals(type) || "parenthesized_declarator".equals(type) || "reference_declarator".equals(type)) {
+             TSNode childDeclarator = declarator.getChildByFieldName("declarator");
+             return extractNameFromDeclarator(childDeclarator, sourceBytes);
+        }
+        
+        return "anonymous";
+    }
+
+    @Override
+    protected SliceType getSliceType(TSNode node) {
+        String type = node.getType();
+        if ("class_specifier".equals(type)) return SliceType.CLASS;
+        if ("struct_specifier".equals(type)) return SliceType.STRUCT;
+        if ("enum_specifier".equals(type)) return SliceType.ENUM;
+        return SliceType.FUNCTION;
     }
 
     @Override
     public String getFunctionQuery() {
-        // Matches function definitions. 
-        // Note: C++ grammar is complex. This query matches common cases.
-        return "(function_definition declarator: (_ declarator: [(identifier) (qualified_identifier)] @name)) @function";
+        return "(function_definition declarator: (function_declarator declarator: (identifier) @name)) @function";
     }
 }

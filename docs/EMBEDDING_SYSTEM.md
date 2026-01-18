@@ -11,7 +11,7 @@
 *   **`ProjectIngestor`**: 系统的入口。负责遍历项目目录，识别支持的源代码文件，调用切片器提取函数，并协调 Embedding 生成与存储。
 *   **`EmbeddingService`**: 抽象接口，负责将文本转换为浮点数向量。
 *   **`VectorStore`**: 抽象接口，负责向量及元数据的持久化存储和检索。
-*   **`CodeSlice`**: 基础数据模型，表示一个代码片段（函数名、内容、位置信息等）。
+*   **`CodeSlice`**: 基础数据模型，表示一个代码片段（名称、类型、内容、位置信息等）。
 
 ## 2. 接口定义 (Interfaces)
 
@@ -57,7 +57,7 @@ public interface VectorStore {
 | :--- | :--- | :--- |
 | `id` | IDENTITY | 主键 |
 | `content` | CLOB | 代码片段的完整文本内容 |
-| `function_name` | VARCHAR | 函数/方法名称 |
+| `function_name` | VARCHAR | 代码片段名称 (函数名/类名等) |
 | `start_line` | INT | 开始行号 |
 | `end_line` | INT | 结束行号 |
 | `language` | VARCHAR | 编程语言类型 (JAVA, PYTHON, etc.) |
