@@ -30,4 +30,9 @@ public class PythonSlicer extends AbstractSlicer {
         }
         return "anonymous";
     }
+
+    @Override
+    public String getFunctionQuery() {
+        return "(function_definition name: (identifier) @name) @function";
+    }
 }

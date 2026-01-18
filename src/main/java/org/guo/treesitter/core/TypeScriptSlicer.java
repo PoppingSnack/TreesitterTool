@@ -31,4 +31,9 @@ public class TypeScriptSlicer extends AbstractSlicer {
         }
         return "anonymous";
     }
+
+    @Override
+    public String getFunctionQuery() {
+        return "[(function_declaration name: (identifier) @name) (method_definition name: (property_identifier) @name)] @function";
+    }
 }

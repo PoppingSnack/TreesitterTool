@@ -23,6 +23,12 @@ public abstract class AbstractSlicer implements CodeSlicer {
     protected abstract boolean isFunctionNode(TSNode node);
     protected abstract String getFunctionName(TSNode node, byte[] sourceBytes);
 
+    /**
+     * Returns the S-expression query for extracting functions.
+     * The query should capture the function name as @name and the function body/definition as @function.
+     */
+    public abstract String getFunctionQuery();
+
     @Override
     public List<CodeSlice> slice(String code) {
         List<CodeSlice> slices = new ArrayList<>();
