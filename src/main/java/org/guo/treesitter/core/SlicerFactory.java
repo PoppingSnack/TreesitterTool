@@ -13,6 +13,10 @@ public class SlicerFactory {
     static {
         slicers.put(LanguageType.PYTHON, new PythonSlicer());
         slicers.put(LanguageType.TYPESCRIPT, new TypeScriptSlicer());
+        slicers.put(LanguageType.JAVA, new JavaSlicer());
+        slicers.put(LanguageType.C, new CSlicer());
+        slicers.put(LanguageType.CPP, new CppSlicer());
+        slicers.put(LanguageType.GO, new GoSlicer());
     }
 
     public static CodeSlicer getSlicer(LanguageType languageType) {
@@ -31,6 +35,18 @@ public class SlicerFactory {
             case "ts":
             case "typescript":
                 return getSlicer(LanguageType.TYPESCRIPT);
+            case "java":
+                return getSlicer(LanguageType.JAVA);
+            case "c":
+                return getSlicer(LanguageType.C);
+            case "cpp":
+            case "cc":
+            case "cxx":
+            case "h":
+            case "hpp":
+                return getSlicer(LanguageType.CPP);
+            case "go":
+                return getSlicer(LanguageType.GO);
             default:
                 throw new IllegalArgumentException("Unsupported file extension: " + extension);
         }

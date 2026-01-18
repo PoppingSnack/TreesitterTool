@@ -36,6 +36,34 @@
             <version>0.23.2</version>
         </dependency>
 
+        <!-- Java Grammar -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-java</artifactId>
+            <version>0.23.4</version>
+        </dependency>
+
+        <!-- C Grammar -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-c</artifactId>
+            <version>0.23.2</version>
+        </dependency>
+
+        <!-- C++ Grammar -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-cpp</artifactId>
+            <version>0.23.4</version>
+        </dependency>
+
+        <!-- Go Grammar -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-go</artifactId>
+            <version>0.23.3</version>
+        </dependency>
+
         <!-- JUnit 5 -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

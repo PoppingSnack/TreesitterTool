@@ -2,5 +2,9 @@ package org.guo.treesitter.model;
 
 public enum LanguageType {
     PYTHON,
-    TYPESCRIPT
+    TYPESCRIPT,
+    JAVA,
+    C,
+    CPP,
+    GO
 }
