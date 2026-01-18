@@ -1,7 +1,16 @@
 package org.guo.treesitter.service;
 
-import org.guo.treesitter.model.CodeSlice;
-
 public interface EmbeddingService {
-    void embed(CodeSlice slice);
+    /**
+     * Converts a text string into a vector (array of floats).
+     *
+     * @param text The input text (e.g., function content).
+     * @return The embedding vector.
+     */
+    float[] embed(String text);
+    
+    /**
+     * Returns the dimension of the vectors produced by this service.
+     */
+    int getDimension();
 }
