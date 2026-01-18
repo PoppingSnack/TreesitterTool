@@ -1,0 +1,16 @@
+interface User {
+    id: number;
+    name: string;
+}
+
+class UserService {
+    private users: User[] = [];
+
+    addUser(user: User): void {
+        this.users.push(user);
+    }
+
+    getUsers(): User[] {
+        return this.users;
+    }
+}
