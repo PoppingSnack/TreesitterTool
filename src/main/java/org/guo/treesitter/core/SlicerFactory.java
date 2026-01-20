@@ -18,6 +18,7 @@ public class SlicerFactory {
         slicers.put(LanguageType.CPP, new CppSlicer());
         slicers.put(LanguageType.GO, new GoSlicer());
         slicers.put(LanguageType.JAVASCRIPT, new JavaScriptSlicer());
+        slicers.put(LanguageType.ARKTS, new ArkTSSlicer());
     }
 
     public static CodeSlicer getSlicer(LanguageType languageType) {
@@ -33,8 +34,16 @@ public class SlicerFactory {
             case "py":
             case "python":
                 return getSlicer(LanguageType.PYTHON);
-            case "ts":
+            case "ets":
+            case "ts": // ArkTS uses .ets mostly but shares .ts
             case "typescript":
+                // Priority: if user asks for .ts, it might be TS or ArkTS.
+                // Standard TS slicer handles TS.
+                // If specific arkts is needed, we usually look for .ets.
+                // For now, let's map .ets to ARKTS.
+                if ("ets".equalsIgnoreCase(extension)) {
+                    return getSlicer(LanguageType.ARKTS);
+                }
                 return getSlicer(LanguageType.TYPESCRIPT);
             case "java":
                 return getSlicer(LanguageType.JAVA);

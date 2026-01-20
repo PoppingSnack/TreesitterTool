@@ -7,5 +7,6 @@ public enum LanguageType {
     JAVA,
     C,
     CPP,
-    GO
+    GO,
+    ARKTS
 }
