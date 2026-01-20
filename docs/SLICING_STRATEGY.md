@@ -32,15 +32,16 @@
 | 类 | `class_definition` | `CLASS` | |
 | 函数/方法 | `function_definition` | `FUNCTION` | 包含模块级函数和类方法 |
 
-### 2.3 TypeScript
+### 2.3 TypeScript / JavaScript
 
 | 结构 | Tree-sitter Node Type | 映射 SliceType | 备注 |
 | :--- | :--- | :--- | :--- |
 | 类 | `class_declaration` | `CLASS` | |
-| 接口 | `interface_declaration` | `INTERFACE` | |
-| 类型别名 | `type_alias_declaration` | `TYPE_ALIAS` | e.g. `type User = { ... }` |
-| 枚举 | `enum_declaration` | `ENUM` | |
+| 接口 | `interface_declaration` | `INTERFACE` | 仅 TS |
+| 类型别名 | `type_alias_declaration` | `TYPE_ALIAS` | 仅 TS |
+| 枚举 | `enum_declaration` | `ENUM` | 仅 TS |
 | 函数 | `function_declaration` | `FUNCTION` | |
+| 生成器函数 | `generator_function_declaration` | `FUNCTION` | 仅 JS (TS 也可能支持) |
 | 方法 | `method_definition` | `FUNCTION` | 类中的方法 |
 
 ### 2.4 Go

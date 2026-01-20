@@ -36,6 +36,13 @@
             <version>0.23.2</version>
         </dependency>
 
+        <!-- JavaScript Grammar -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-javascript</artifactId>
+            <version>0.23.1</version>
+        </dependency>
+
         <!-- Java Grammar -->
         <dependency>
             <groupId>io.github.bonede</groupId>

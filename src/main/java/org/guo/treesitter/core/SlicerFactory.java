@@ -17,6 +17,7 @@ public class SlicerFactory {
         slicers.put(LanguageType.C, new CSlicer());
         slicers.put(LanguageType.CPP, new CppSlicer());
         slicers.put(LanguageType.GO, new GoSlicer());
+        slicers.put(LanguageType.JAVASCRIPT, new JavaScriptSlicer());
     }
 
     public static CodeSlicer getSlicer(LanguageType languageType) {
@@ -47,6 +48,9 @@ public class SlicerFactory {
                 return getSlicer(LanguageType.CPP);
             case "go":
                 return getSlicer(LanguageType.GO);
+            case "js":
+            case "javascript":
+                return getSlicer(LanguageType.JAVASCRIPT);
             default:
                 throw new IllegalArgumentException("Unsupported file extension: " + extension);
         }
