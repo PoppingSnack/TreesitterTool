@@ -30,38 +30,17 @@ public class SlicerFactory {
     }
 
     public static CodeSlicer getSlicerByExtension(String extension) {
-        switch (extension.toLowerCase()) {
-            case "py":
-            case "python":
-                return getSlicer(LanguageType.PYTHON);
-            case "ets":
-            case "ts": // ArkTS uses .ets mostly but shares .ts
-            case "typescript":
-                // Priority: if user asks for .ts, it might be TS or ArkTS.
-                // Standard TS slicer handles TS.
-                // If specific arkts is needed, we usually look for .ets.
-                // For now, let's map .ets to ARKTS.
-                if ("ets".equalsIgnoreCase(extension)) {
-                    return getSlicer(LanguageType.ARKTS);
-                }
-                return getSlicer(LanguageType.TYPESCRIPT);
-            case "java":
-                return getSlicer(LanguageType.JAVA);
-            case "c":
-                return getSlicer(LanguageType.C);
-            case "cpp":
-            case "cc":
-            case "cxx":
-            case "h":
-            case "hpp":
-                return getSlicer(LanguageType.CPP);
-            case "go":
-                return getSlicer(LanguageType.GO);
-            case "js":
-            case "javascript":
-                return getSlicer(LanguageType.JAVASCRIPT);
-            default:
-                throw new IllegalArgumentException("Unsupported file extension: " + extension);
+        // Special logic for TS/ETS conflict if needed, otherwise delegate to enum
+        if ("ets".equalsIgnoreCase(extension)) {
+            return getSlicer(LanguageType.ARKTS);
+        }
+        
+        try {
+            LanguageType type = LanguageType.fromExtension(extension);
+            return getSlicer(type);
+        } catch (IllegalArgumentException e) {
+            // Re-throw or handle as before
+            throw new IllegalArgumentException("Unsupported file extension: " + extension);
         }
     }
 }
