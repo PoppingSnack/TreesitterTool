@@ -12,17 +12,8 @@ def find_child_by_type(node, type_name):
             return child
     return None
 
-def main():
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "No file path provided"}))
-        return
-
-    file_path = sys.argv[1]
-    
+def parse_source(source_bytes):
     try:
-        with open(file_path, 'rb') as f:
-            source_bytes = f.read()
-            
         ARKTS_LANGUAGE = Language(arkts.language())
         parser = Parser(ARKTS_LANGUAGE)
         tree = parser.parse(source_bytes)
@@ -126,13 +117,72 @@ def main():
                 else:
                     if cursor.goto_next_sibling():
                         retracing = False
-
-        print(json.dumps(slices))
-
+                        
+        return slices
     except Exception as e:
-        # Print error to stderr so java can capture it if needed, but return valid json to stdout if possible
-        # Or just print json error
-        print(json.dumps({"error": str(e)}))
+        return {"error": str(e)}
+
+def parse_file(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            source_bytes = f.read()
+        return parse_source(source_bytes)
+    except Exception as e:
+        return {"error": str(e)}
+
+def parse_content(content):
+    try:
+        return parse_source(content.encode('utf-8'))
+    except Exception as e:
+        return {"error": str(e)}
+
+def run_daemon():
+    while True:
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            
+            # Support both JSON request and legacy raw file path
+            result = []
+            try:
+                request = json.loads(line)
+                if isinstance(request, dict):
+                    if 'content' in request:
+                        result = parse_content(request['content'])
+                    elif 'file' in request:
+                        result = parse_file(request['file'])
+                    else:
+                        result = {"error": "Invalid request: missing 'file' or 'content' field"}
+                else:
+                    # If line is a JSON string but not a dict, treat as file path if it looks like one?
+                    # Safer to just fallback to file path logic if not a dict.
+                    result = parse_file(line.strip())
+            except json.JSONDecodeError:
+                # Not JSON, treat as raw file path (backward compatibility)
+                file_path = line.strip()
+                if not file_path:
+                    continue
+                result = parse_file(file_path)
+            
+            print(json.dumps(result))
+            sys.stdout.flush()
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+            sys.stdout.flush()
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
+        run_daemon()
+        return
+
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "No file path provided"}))
+        return
+
+    file_path = sys.argv[1]
+    result = parse_file(file_path)
+    print(json.dumps(result))
 
 if __name__ == "__main__":
     main()

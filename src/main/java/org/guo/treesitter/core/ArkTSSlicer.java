@@ -2,15 +2,18 @@ package org.guo.treesitter.core;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.guo.treesitter.model.CodeSlice;
 import org.guo.treesitter.model.LanguageType;
 import org.guo.treesitter.model.SliceType;
 import org.guo.treesitter.service.CodeSlicer;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,77 +27,151 @@ public class ArkTSSlicer implements CodeSlicer {
     private static final String CONFIGURED_PYTHON_EXECUTABLE = "D:\\Software\\python3.13\\python.exe";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Override
-    public List<CodeSlice> slice(String code) {
-        // ArkTSSlicer requires a file on disk to work with the python script easily.
-        // For slice(String code), we create a temp file.
-        try {
-            Path tempFile = Files.createTempFile("arkts_temp", ".ets");
-            Files.writeString(tempFile, code);
-            List<CodeSlice> slices = sliceFile(tempFile.toFile());
-            Files.delete(tempFile);
-            return slices;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return new ArrayList<>();
+    // ThreadLocal to manage a separate Python daemon process for each thread
+    private static final ThreadLocal<PythonDaemon> pythonDaemon = ThreadLocal.withInitial(() -> null);
+
+    private static class PythonDaemon {
+        Process process;
+        BufferedWriter writer;
+        BufferedReader reader;
+
+        PythonDaemon(Process process) {
+            this.process = process;
+            this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            this.reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        }
+
+        void close() {
+            try {
+                if (writer != null) writer.close();
+                if (reader != null) reader.close();
+            } catch (IOException ignored) {}
+            if (process != null) process.destroy();
         }
     }
 
+    @Override
+    public List<CodeSlice> slice(String code) {
+        ObjectNode request = objectMapper.createObjectNode();
+        request.put("content", code);
+        return sliceInternal(request);
+    }
+
     public List<CodeSlice> sliceFile(File file) {
+        ObjectNode request = objectMapper.createObjectNode();
+        request.put("file", file.getAbsolutePath());
+        return sliceInternal(request);
+    }
+
+    private List<CodeSlice> sliceInternal(ObjectNode requestNode) {
         List<CodeSlice> slices = new ArrayList<>();
-        
-        String pythonCommand = "python";
-        File configuredPython = new File(CONFIGURED_PYTHON_EXECUTABLE);
-        if (configuredPython.exists() && configuredPython.isFile()) {
-            pythonCommand = CONFIGURED_PYTHON_EXECUTABLE;
-        } else {
-            // Fallback check or logging if needed, for now just use "python" from PATH
-            // But user specifically asked to handle non-path scenario if it's just a command name
-            // If CONFIGURED_PYTHON_EXECUTABLE is not a path but a command (unlikely given the name, but possible logic)
-            // Here we prioritize the absolute path if it exists.
+        PythonDaemon daemon = getOrStartDaemon();
+
+        if (daemon == null) {
+            System.err.println("Failed to start ArkTS slicer daemon.");
+            return slices;
         }
 
         try {
-            String scriptAbsPath = new File(PYTHON_SCRIPT_PATH).getAbsolutePath();
-            // Use the determined python command
-            ProcessBuilder pb = new ProcessBuilder(pythonCommand, scriptAbsPath, file.getAbsolutePath());
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
+            // Send request
+            String requestJson = objectMapper.writeValueAsString(requestNode);
+            // Ensure single line for the protocol (ObjectMapper usually produces single line by default unless pretty printer is enabled)
+            // But to be safe, replace newlines if any (though content might have newlines, json escapes them)
+            // writeValueAsString guarantees a valid JSON string, which escapes internal newlines.
+            // So it is safe to write it as a line.
+            
+            daemon.writer.write(requestJson);
+            daemon.writer.newLine();
+            daemon.writer.flush();
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line);
+            // Read response
+            String jsonOutput = daemon.reader.readLine();
+            
+            if (jsonOutput == null) {
+                // Process likely died
+                System.err.println("ArkTS slicer daemon closed unexpectedly. Restarting...");
+                daemon.close();
+                pythonDaemon.remove(); // Clear invalid daemon
+                
+                // Retry once
+                daemon = getOrStartDaemon();
+                if (daemon != null) {
+                    daemon.writer.write(requestJson);
+                    daemon.writer.newLine();
+                    daemon.writer.flush();
+                    jsonOutput = daemon.reader.readLine();
+                }
             }
-            int exitCode = process.waitFor();
 
-            if (exitCode == 0) {
-                String jsonOutput = output.toString();
-                if (jsonOutput.startsWith("{") && jsonOutput.contains("\"error\"")) {
-                    System.err.println("Python script error: " + jsonOutput);
-                    return slices;
+            if (jsonOutput != null) {
+                 if (jsonOutput.startsWith("{") && jsonOutput.contains("\"error\"")) {
+                    // It might be a valid error response from python
+                    // Let's parse it to be sure
+                    try {
+                        Map<String, Object> errorMap = objectMapper.readValue(jsonOutput, new TypeReference<>() {});
+                        if (errorMap.containsKey("error")) {
+                            System.err.println("Python script error: " + errorMap.get("error"));
+                            return slices;
+                        }
+                    } catch (Exception ignored) {
+                        // Not a simple error object, maybe list? Proceed to try parsing as list.
+                    }
                 }
                 
-                List<Map<String, Object>> rawSlices = objectMapper.readValue(jsonOutput, new TypeReference<>() {});
-                for (Map<String, Object> raw : rawSlices) {
-                    String name = (String) raw.get("name");
-                    String typeStr = (String) raw.get("type");
-                    String content = (String) raw.get("content");
-                    int startLine = (int) raw.get("startLine");
-                    int endLine = (int) raw.get("endLine");
-                    
-                    SliceType type = SliceType.valueOf(typeStr);
-                    slices.add(new CodeSlice(content, name, startLine, endLine, LanguageType.ARKTS, type));
+                // If it's a list (expected success case)
+                if (jsonOutput.startsWith("[")) {
+                    List<Map<String, Object>> rawSlices = objectMapper.readValue(jsonOutput, new TypeReference<>() {});
+                    for (Map<String, Object> raw : rawSlices) {
+                        String name = (String) raw.get("name");
+                        String typeStr = (String) raw.get("type");
+                        String content = (String) raw.get("content");
+                        int startLine = (int) raw.get("startLine");
+                        int endLine = (int) raw.get("endLine");
+                        
+                        SliceType type = SliceType.valueOf(typeStr);
+                        slices.add(new CodeSlice(content, name, startLine, endLine, LanguageType.ARKTS, type));
+                    }
+                } else if (jsonOutput.contains("\"error\"")) {
+                     System.err.println("Python script returned error: " + jsonOutput);
                 }
-            } else {
-                System.err.println("ArkTS slicer process failed with code " + exitCode);
-                System.err.println("Output: " + output);
             }
 
         } catch (Exception e) {
             e.printStackTrace();
+            // Invalidate daemon on error
+            if (daemon != null) daemon.close();
+            pythonDaemon.remove();
         }
         return slices;
+    }
+
+    private PythonDaemon getOrStartDaemon() {
+        PythonDaemon daemon = pythonDaemon.get();
+        if (daemon != null && daemon.process.isAlive()) {
+            return daemon;
+        }
+
+        String pythonCommand = "python";
+        File configuredPython = new File(CONFIGURED_PYTHON_EXECUTABLE);
+        if (configuredPython.exists() && configuredPython.isFile()) {
+            pythonCommand = CONFIGURED_PYTHON_EXECUTABLE;
+        }
+
+        try {
+            String scriptAbsPath = new File(PYTHON_SCRIPT_PATH).getAbsolutePath();
+            // Start process in daemon mode
+            ProcessBuilder pb = new ProcessBuilder(pythonCommand, scriptAbsPath, "--daemon");
+            // DO NOT redirect error stream to stdout, keep them separate to avoid polluting JSON output
+            // pb.redirectErrorStream(true); 
+            
+            Process process = pb.start();
+            daemon = new PythonDaemon(process);
+            pythonDaemon.set(daemon);
+            return daemon;
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }

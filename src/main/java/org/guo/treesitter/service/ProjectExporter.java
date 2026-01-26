@@ -14,6 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.ArrayList;
+
 public class ProjectExporter {
 
     private final TreeSitterTool treeSitterTool;
@@ -58,51 +62,69 @@ public class ProjectExporter {
     }
     
     // Re-implementing walk with export logic to have access to file paths
+    // Optimized with parallel processing for better performance, especially for ArkTS
     public void exportWithWalk(Path projectRoot, LanguageType language, Path outputFile) throws IOException {
          if (outputFile.getParent() != null) {
             Files.createDirectories(outputFile.getParent());
         }
 
-        try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
-            Files.walk(projectRoot)
-                .filter(Files::isRegularFile)
-                .forEach(file -> {
-                    try {
-                        // Check extension
-                        String fileName = file.getFileName().toString();
-                        String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
-                        
-                        if (language.getExtensions().contains(ext)) {
-                             List<CodeSlice> slices = treeSitterTool.analyzeFile(file);
-                             Path relativePath = projectRoot.relativize(file);
-                             
-                             for (CodeSlice slice : slices) {
-                                 if (slice.getType() == SliceType.FUNCTION) {
-                                     String nodeId = NodeIdGenerator.generate(
-                                         relativePath.toString().replace("\\", "/"), // Normalize path separators
-                                         slice.getName(), 
-                                         slice.getStartLine()
-                                     );
-                                     
-                                     ExportNode node = new ExportNode(
-                                         nodeId,
-                                         slice.getName(),
-                                         "function_definition",
-                                         relativePath.toString().replace("\\", "/"),
-                                         slice.getContent(),
-                                         slice.getStartLine(),
-                                         slice.getEndLine()
-                                     );
-                                     
-                                     writer.write(objectMapper.writeValueAsString(node));
-                                     writer.newLine();
-                                 }
+        try (BufferedWriter writer = Files.newBufferedWriter(outputFile);
+             Stream<Path> stream = Files.walk(projectRoot)) {
+            
+            // Collect files first to facilitate parallel processing
+            List<Path> files = stream.filter(Files::isRegularFile).collect(Collectors.toList());
+            
+            files.parallelStream().forEach(file -> {
+                try {
+                    // Check extension
+                    String fileName = file.getFileName().toString();
+                    int lastDotIndex = fileName.lastIndexOf(".");
+                    if (lastDotIndex == -1) return;
+                    
+                    String ext = fileName.substring(lastDotIndex + 1).toLowerCase();
+                    
+                    if (language.getExtensions().contains(ext)) {
+                         List<CodeSlice> slices = treeSitterTool.analyzeFile(file);
+                         if (slices == null || slices.isEmpty()) return;
+
+                         Path relativePath = projectRoot.relativize(file);
+                         String relativePathStr = relativePath.toString().replace("\\", "/");
+                         StringBuilder fileOutputBuffer = new StringBuilder();
+                         
+                         for (CodeSlice slice : slices) {
+                             if (slice.getType() == SliceType.FUNCTION) {
+                                 String nodeId = NodeIdGenerator.generate(
+                                     relativePathStr, // Normalize path separators
+                                     slice.getName(), 
+                                     slice.getStartLine()
+                                 );
+                                 
+                                 ExportNode node = new ExportNode(
+                                     nodeId,
+                                     slice.getName(),
+                                     "function_definition",
+                                     relativePathStr,
+                                     slice.getContent(),
+                                     slice.getStartLine(),
+                                     slice.getEndLine()
+                                 );
+                                 
+                                 fileOutputBuffer.append(objectMapper.writeValueAsString(node));
+                                 fileOutputBuffer.append(System.lineSeparator());
                              }
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                         }
+                         
+                         // Synchronized write per file to minimize contention
+                         if (fileOutputBuffer.length() > 0) {
+                             synchronized (writer) {
+                                 writer.write(fileOutputBuffer.toString());
+                             }
+                         }
                     }
-                });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
         }
     }
 }
