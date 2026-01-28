@@ -24,8 +24,6 @@ import java.util.Map;
 public class ArkTSSlicer implements CodeSlicer {
 
     private static final String PYTHON_SCRIPT_PATH = "scripts/arkts_slicer.py";
-    // Use the python path provided by the user, default to simple "python" if not found
-    private static final String CONFIGURED_PYTHON_EXECUTABLE = "D:\\Software\\python3.13\\python.exe";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ThreadLocal to manage a separate Python daemon process for each thread
@@ -52,12 +50,45 @@ public class ArkTSSlicer implements CodeSlicer {
         }
     }
 
+    /**
+     * Resolves the Python executable path with the following priority:
+     * 1. Embedded runtime in project_root/runtime/[os]/python/
+     * 2. Configured path (dev environment)
+     * 3. System PATH ("python" or "python3")
+     */
+    private String getPythonCommand() {
+        String os = System.getProperty("os.name").toLowerCase();
+        Path projectRoot = Path.of(System.getProperty("user.dir"));
+        Path embeddedPython;
+
+        if (os.contains("win")) {
+            // Windows: runtime/win/python/python.exe
+            embeddedPython = projectRoot.resolve("runtime/win/python/python.exe");
+        } else {
+            // Linux/Mac: runtime/linux/python/bin/python3
+            embeddedPython = projectRoot.resolve("runtime/linux/python/bin/python3");
+        }
+
+        if (Files.exists(embeddedPython)) {
+            return embeddedPython.toAbsolutePath().toString();
+        }
+
+        // Fallback to previous hardcoded path or system path
+        File configuredPython = new File("D:\\Software\\python3.13\\python.exe");
+        if (configuredPython.exists() && configuredPython.isFile()) {
+            return configuredPython.getAbsolutePath();
+        }
+        
+        return "python";
+    }
+
     @Override
     public List<CodeSlice> slice(String code) {
         ObjectNode request = objectMapper.createObjectNode();
         request.put("content", code);
         return sliceInternal(request);
     }
+
 
     public List<CodeSlice> sliceFile(File file) {
         ObjectNode request = objectMapper.createObjectNode();
@@ -153,11 +184,7 @@ public class ArkTSSlicer implements CodeSlicer {
             return daemon;
         }
 
-        String pythonCommand = "python";
-        File configuredPython = new File(CONFIGURED_PYTHON_EXECUTABLE);
-        if (configuredPython.exists() && configuredPython.isFile()) {
-            pythonCommand = CONFIGURED_PYTHON_EXECUTABLE;
-        }
+        String pythonCommand = getPythonCommand();
 
         try {
             String scriptAbsPath = new File(PYTHON_SCRIPT_PATH).getAbsolutePath();
@@ -165,6 +192,11 @@ public class ArkTSSlicer implements CodeSlicer {
             ProcessBuilder pb = new ProcessBuilder(pythonCommand, scriptAbsPath, "--daemon");
             // DO NOT redirect error stream to stdout, keep them separate to avoid polluting JSON output
             // pb.redirectErrorStream(true); 
+            
+            // Set PYTHONPATH if using embedded runtime to ensure dependencies are found?
+            // Usually embedded python finds its own site-packages if configured correctly (python310._pth or site-packages folder).
+            // But if we want to be safe, we could add project_root/runtime/libs or similar.
+            // For now, assume standard portable python layout.
             
             Process process = pb.start();
             daemon = new PythonDaemon(process);
