@@ -4,6 +4,7 @@ import org.guo.treesitter.core.SlicerFactory;
 import org.guo.treesitter.model.CodeSlice;
 import org.guo.treesitter.model.LanguageType;
 import org.guo.treesitter.service.CodeSlicer;
+import org.guo.treesitter.utils.FileUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +33,8 @@ public class TreeSitterTool {
         
         try {
             CodeSlicer slicer = SlicerFactory.getSlicerByExtension(extension);
-            String content = Files.readString(file);
+            // Use FileUtils to detect encoding and read content
+            String content = FileUtils.readFile(file);
             return slicer.slice(content);
         } catch (IllegalArgumentException e) {
             // Unsupported extension
@@ -94,7 +96,8 @@ public class TreeSitterTool {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 if (isLanguageFile(file, language)) {
-                    String content = Files.readString(file);
+                    // Use FileUtils to detect encoding
+                    String content = FileUtils.readFile(file);
                     allSlices.addAll(slicer.slice(content));
                 }
                 return FileVisitResult.CONTINUE;

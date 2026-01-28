@@ -48,6 +48,13 @@ public class ProjectExporterTest {
         );
         
         Assertions.assertTrue(foundAdd, "Should find 'add' function from calculator.py");
+
+        // Check for Chinese content
+        boolean foundChinese = nodes.stream().anyMatch(n -> 
+            n.getText().contains("这是一个加法函数") || 
+            n.getName().equals("中文方法")
+        );
+        Assertions.assertTrue(foundChinese, "Should find Chinese content or method name");
         
         // Verify format of one node
         ExportNode node = nodes.get(0);
@@ -58,7 +65,7 @@ public class ProjectExporterTest {
 
     private List<ExportNode> readNdjson(Path file) throws IOException {
         List<ExportNode> nodes = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file.toFile()))) {
+        try (BufferedReader reader = Files.newBufferedReader(file)) {
             String line;
             while ((line = reader.readLine()) != null) {
                 nodes.add(objectMapper.readValue(line, ExportNode.class));

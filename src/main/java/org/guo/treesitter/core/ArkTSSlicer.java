@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,8 +38,9 @@ public class ArkTSSlicer implements CodeSlicer {
 
         PythonDaemon(Process process) {
             this.process = process;
-            this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            this.reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            // Use UTF-8 explicitly to avoid encoding issues with non-ASCII characters (e.g. Chinese)
+            this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
+            this.reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
         }
 
         void close() {
